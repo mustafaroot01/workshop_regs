@@ -7,9 +7,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WorkshopForm extends Model
 {
-    protected $fillable = ['title', 'description', 'is_open'];
+    protected $fillable = ['title', 'description', 'is_open', 'department_id'];
 
     protected $casts = ['is_open' => 'boolean'];
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
 
     public function students(): HasMany
     {

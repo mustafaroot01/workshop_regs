@@ -43,6 +43,9 @@
           <div class="card-main">
             <div class="card-info">
               <h3 class="card-title">{{ f.title }}</h3>
+              <p style="font-size:0.8rem;color:var(--primary);margin-top:0.2rem;font-weight:600">
+                📌 {{ f.department ? f.department.name : 'جميع الأقسام' }}
+              </p>
               <p v-if="f.description" class="card-desc">{{ f.description }}</p>
             </div>
             
@@ -103,12 +106,19 @@
             <label class="form-label">عنوان الورشة *</label>
             <input v-model="newTitle" type="text" class="form-input" placeholder="مثال: ورشة عمل في البرمجة" autoFocus @keyup.enter="createForm" />
           </div>
+          <div class="form-group" style="margin-bottom:1rem" v-if="!adminDeptId">
+            <label class="form-label">القسم المستهدف *</label>
+            <select v-model="newDeptId" class="form-input">
+              <option value="" disabled>اختر القسم...</option>
+              <option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option>
+            </select>
+          </div>
           <div class="form-group" style="margin-bottom:1.5rem">
             <label class="form-label">وصف (اختياري)</label>
             <textarea v-model="newDesc" class="form-textarea" placeholder="اكتب تفاصيل إضافية..."></textarea>
           </div>
           <div style="display:flex;gap:0.8rem">
-            <button class="btn btn-primary" style="flex:1" @click="createForm" :disabled="!newTitle.trim() || creating">
+            <button class="btn btn-primary" style="flex:1" @click="createForm" :disabled="!newTitle.trim() || (!adminDeptId && !newDeptId) || creating">
               <span v-if="creating" class="spinner" /> حفظ
             </button>
             <button class="btn btn-ghost" style="flex:1" @click="showModal = false">إلغاء</button>
@@ -121,31 +131,48 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getForms, createForm as apiCreate, updateForm, deleteForm } from '../../stores/api.js'
+import { getForms, createForm as apiCreate, updateForm, deleteForm, getDepartments } from '../../stores/api.js'
 
 const adminRole = ref(localStorage.getItem('admin_role') || 'admin')
+const adminUserStr = localStorage.getItem('admin_user')
+const adminUserLocal = adminUserStr ? JSON.parse(adminUserStr) : null
+const adminDeptId = ref(adminUserLocal ? adminUserLocal.department_id : null)
 const forms = ref([])
+const departments = ref([])
 const loading = ref(true)
 const showModal = ref(false)
 const newTitle = ref('')
 const newDesc = ref('')
+const newDeptId = ref('')
 const creating = ref(false)
 const deletingForm = ref(null)
 const isDeleting = ref(false)
 
 async function loadForms() {
-  try { const { data } = await getForms(); forms.value = data }
-  finally { loading.value = false }
+  const { data } = await getForms()
+  forms.value = data
 }
 
-onMounted(loadForms)
+async function loadData() {
+  try {
+    const [formsRes, deptsRes] = await Promise.all([getForms(), getDepartments()])
+    forms.value = formsRes.data
+    departments.value = deptsRes.data
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadData)
 
 async function createForm() {
-  if (!newTitle.value.trim()) return
+  if (!newTitle.value.trim() || (!adminDeptId.value && !newDeptId.value)) return
   creating.value = true
   try {
-    await apiCreate({ title: newTitle.value, description: newDesc.value })
-    newTitle.value = ''; newDesc.value = ''; showModal.value = false
+    const payload = { title: newTitle.value, description: newDesc.value }
+    if (!adminDeptId.value) payload.department_id = newDeptId.value
+    await apiCreate(payload)
+    newTitle.value = ''; newDesc.value = ''; newDeptId.value = ''; showModal.value = false
     await loadForms()
   } finally { creating.value = false }
 }

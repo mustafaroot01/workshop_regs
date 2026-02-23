@@ -3,10 +3,10 @@
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <img :src="'/logo.png'" alt="شعار المركز" style="width: 40px; height: 40px; object-fit: contain; border-radius: 50%; background: white;" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%237c3aed\'><path d=\'M12 2L2 7l10 5 10-5-10-5zm0 7.5L4.5 7 12 4.1 19.5 7 12 9.5zM2 12l10 5 10-5M2 17l10 5 10-5\'/></svg>'">
+        <img :src="adminDeptLogo || '/logo.png'" alt="شعار المركز" style="width: 40px; height: 40px; object-fit: contain; border-radius: 50%; background: white;" onerror="this.src='/logo.png'">
         <div style="display:flex; flex-direction:column; line-height: 1.2;">
-          <span class="logo-text" style="font-size:0.9rem;">مركز التعليم المستمر</span>
-          <span style="color:#b0d4f5; font-size:0.75rem; font-weight:600;">هندسة تقنيات الحاسوب</span>
+          <span class="logo-text" style="font-size:0.9rem;">{{ adminDeptName || 'مركز التعليم المستمر' }}</span>
+          <span style="color:#b0d4f5; font-size:0.75rem; font-weight:600;">{{ adminDeptName ? 'نظام التسجيل' : 'جامعة بلاد الرافدين' }}</span>
         </div>
       </div>
 
@@ -17,9 +17,14 @@
         <router-link :to="{ name: 'AdminForms' }" class="nav-item" active-class="active">
           <span class="nav-icon">📋</span> الاستمارات
         </router-link>
-        <router-link v-if="adminRole === 'admin'" :to="{ name: 'AdminSettings' }" class="nav-item" active-class="active">
+        <router-link v-if="adminRole === 'admin' && !adminDeptId" :to="{ name: 'AdminSettings' }" class="nav-item" active-class="active">
           <span class="nav-icon">⚙️</span> الإعدادات
         </router-link>
+        
+        <button class="nav-item" @click="toggleDarkMode" style="background:transparent;border:none;width:100%;text-align:right;cursor:pointer;margin-top:auto">
+          <span class="nav-icon">{{ isDarkMode ? '☀️' : '🌙' }}</span> 
+          <span>{{ isDarkMode ? 'الوضع الفاتح' : 'الوضع الليلي' }}</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -38,13 +43,41 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminLogout } from '../../stores/api.js'
 
 const router = useRouter()
 const adminName = ref(localStorage.getItem('admin_name') || 'المشرف')
 const adminRole = ref(localStorage.getItem('admin_role') || 'admin')
+const adminUserStr = localStorage.getItem('admin_user')
+const adminUserLocal = adminUserStr ? JSON.parse(adminUserStr) : null
+const adminDeptId = ref(adminUserLocal ? adminUserLocal.department_id : null)
+const adminDeptName = ref(adminUserLocal ? adminUserLocal.department_name : null)
+const adminDeptLogo = ref(adminUserLocal ? adminUserLocal.department_logo : null)
+
+const isDarkMode = ref(false)
+
+onMounted(() => {
+  if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    isDarkMode.value = true
+    document.documentElement.classList.add('dark')
+  } else {
+    isDarkMode.value = false
+    document.documentElement.classList.remove('dark')
+  }
+})
+
+function toggleDarkMode() {
+  isDarkMode.value = !isDarkMode.value
+  if (isDarkMode.value) {
+    document.documentElement.classList.add('dark')
+    localStorage.setItem('theme', 'dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+    localStorage.setItem('theme', 'light')
+  }
+}
 
 async function logout() {
   try { await adminLogout() } catch {}

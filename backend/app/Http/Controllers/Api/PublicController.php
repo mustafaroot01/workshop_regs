@@ -23,11 +23,19 @@ class PublicController extends Controller
     {
         $form = WorkshopForm::where('id', $id)->where('is_open', true)->firstOrFail();
 
+        $logoUrl = null;
+        if ($form->department_id) {
+            $dept = Department::find($form->department_id);
+            $logoUrl = $dept ? $dept->logo_url : null;
+        }
+
         return response()->json([
             'form'        => [
-                'id'          => $form->id,
-                'title'       => $form->title,
-                'description' => $form->description,
+                'id'            => $form->id,
+                'title'         => $form->title,
+                'description'   => $form->description,
+                'department_id' => $form->department_id,
+                'logo_url'      => $logoUrl,
             ],
             'departments' => Department::orderBy('name')->get(['id', 'name']),
             'interests'   => Interest::orderBy('name')->get(['id', 'name', 'department_id']),
@@ -49,7 +57,7 @@ class PublicController extends Controller
             'phone'         => ['nullable', 'string', 'regex:/^[0-9]+$/', 'max:20'],
             'stage'         => ['required', 'integer', Rule::in([1, 2, 3, 4])],
             'study_type'    => ['required', Rule::in(['morning', 'evening'])],
-            'department_id' => ['required', 'exists:departments,id'],
+            'department_id' => [$form->department_id ? 'nullable' : 'required', 'exists:departments,id'],
             'interests'     => ['nullable', 'array'],
             'interests.*'   => ['exists:interests,id'],
             'description'   => ['nullable', 'string', 'max:1000'],
@@ -68,7 +76,7 @@ class PublicController extends Controller
 
         $student = Student::create([
             'form_id'       => $form->id,
-            'department_id' => $validated['department_id'],
+            'department_id' => $form->department_id ?? $validated['department_id'],
             'name'          => $validated['name'],
             'gender'        => $validated['gender'],
             'email'         => $validated['email'] ?? null,
@@ -82,6 +90,9 @@ class PublicController extends Controller
         if (!empty($validated['interests'])) {
             $student->interests()->sync($validated['interests']);
         }
+
+        // Broadcast event for real-time dashboard updates
+        event(new \App\Events\StudentRegistered($student->load(['department', 'form'])));
 
         return response()->json([
             'message'   => 'تم التسجيل بنجاح!',

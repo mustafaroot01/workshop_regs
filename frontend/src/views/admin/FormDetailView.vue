@@ -139,11 +139,22 @@
                 <span class="detail-lbl">تاريخ التسجيل</span>
                 <span class="detail-val" style="direction:ltr">{{ selectedStudent.registered_at }}</span>
               </div>
-              <div class="detail-box">
-                <span class="detail-lbl">حالة الحضور</span>
-                <span class="badge" :class="selectedStudent.attended ? 'badge-success' : 'badge-error'">
-                  {{ selectedStudent.attended ? '✅ حضر' + (selectedStudent.attended_at ? ' (' + selectedStudent.attended_at + ')' : '') : '❌ غائب' }}
-                </span>
+              <div class="detail-box" style="display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start">
+                <div>
+                  <span class="detail-lbl">حالة الحضور</span>
+                  <span class="badge" :class="selectedStudent.attended ? 'badge-success' : 'badge-error'" style="margin-bottom:8px; display:inline-block">
+                    {{ selectedStudent.attended ? '✅ حضر' + (selectedStudent.attended_at ? ' (' + selectedStudent.attended_at + ')' : '') : '❌ غائب' }}
+                  </span>
+                </div>
+                <button 
+                  class="btn" 
+                  :class="selectedStudent.attended ? 'btn-ghost' : 'btn-primary'" 
+                  style="padding:0.3rem 0.6rem; font-size:0.8rem; width:100%"
+                  @click="toggleStudentAttendance(selectedStudent)"
+                  :disabled="isToggling"
+                >
+                  {{ isToggling ? 'جاري التحديث...' : (selectedStudent.attended ? 'إلغاء الحضور' : 'تسجيل الحضور يدوياً') }}
+                </button>
               </div>
             </div>
 
@@ -290,7 +301,7 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { getStudents, getStats, updateStudent, deleteStudent, getDepartments, getInterests } from '../../stores/api.js'
+import { getStudents, getStats, updateStudent, deleteStudent, getDepartments, getInterests, toggleAttendance as toggleAttendanceApi } from '../../stores/api.js'
 import QRCode from 'qrcode'
 import * as XLSX from 'xlsx'
 
@@ -425,6 +436,33 @@ const availableEditInterests = computed(() => {
 watch(() => editFormData.department_id, (newVal, oldVal) => {
   if (oldVal) editFormData.interests = []
 })
+
+const isToggling = ref(false)
+
+async function toggleStudentAttendance(student) {
+  isToggling.value = true
+  try {
+    const res = await toggleAttendanceApi(student.id)
+    student.attended = res.data.attended
+    student.attended_at = res.data.attended_at
+    
+    // update parent stats and list if needed
+    const index = students.value.findIndex(s => s.id === student.id)
+    if (index !== -1) {
+      students.value[index].attended = res.data.attended
+      students.value[index].attended_at = res.data.attended_at
+    }
+    
+    // refetch stats to keep them accurate
+    const stRes = await getStats(route.params.id)
+    stats.value = stRes.data
+    
+  } catch (err) {
+    alert(err.response?.data?.message || 'حدث خطأ أثناء تغيير حالة الحضور.')
+  } finally {
+    isToggling.value = false
+  }
+}
 
 function openEdit(s) {
   Object.keys(editErrors).forEach(k => delete editErrors[k])

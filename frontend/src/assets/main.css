@@ -11,6 +11,7 @@
   padding: 0;
 }
 
+/* ─── Light Theme Variables ──────────────────────── */
 :root {
   --bg-0: #f4f6f9;
   /* Light Gray/Blueish Background */
@@ -54,6 +55,25 @@
   --shadow-glow: 0 0 20px rgba(0, 124, 237, 0.1);
 
   --font: 'Tajawal', system-ui, sans-serif;
+}
+
+/* ─── Dark Theme Variables ───────────────────────── */
+html.dark {
+  --bg-0: #0f172a;
+  --bg-1: #1e293b;
+  --bg-2: #334155;
+  --bg-card: #1e293b;
+  --bg-card-hover: #334155;
+  --border: #334155;
+
+  --primary: #3b82f6;
+  --primary-light: #60a5fa;
+
+  --text-1: #f8fafc;
+  --text-2: #cbd5e1;
+  --text-3: #94a3b8;
+
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
 }
 
 html {

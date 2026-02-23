@@ -90,21 +90,129 @@
         </div>
         </div><!-- end overflow wrapper -->
       </div>
+      
+      <!-- Charts Section -->
+      <div class="dashboard-grid" style="margin-top:2rem">
+        <div class="card" style="padding: 1.5rem">
+          <h3 style="margin-bottom:1rem;font-size:1.1rem">تسجيلات آخر 7 أيام</h3>
+          <div style="position:relative; height:250px">
+            <Line v-if="chartData" :data="chartData.registrations" :options="chartOptions.line" />
+            <div v-else class="spinner-container"><div class="spinner"></div></div>
+          </div>
+        </div>
+        
+        <div class="card" style="padding: 1.5rem">
+          <h3 style="margin-bottom:1rem;font-size:1.1rem">مقارنة الحضور</h3>
+          <div style="position:relative; height:250px; display:flex; justify-content:center">
+            <Doughnut v-if="chartData" :data="chartData.attendance" :options="chartOptions.pie" />
+            <div v-else class="spinner-container"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getOverviewStats } from '../../stores/api.js'
+import { getOverviewStats, getChartStats } from '../../stores/api.js'
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  ArcElement,
+  BarElement
+} from 'chart.js'
+import { Line, Doughnut } from 'vue-chartjs'
+
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  ArcElement,
+  BarElement
+)
 
 const loading = ref(true)
 const stats = ref(null)
+const chartData = ref(null)
+
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
+
+// Chart options ...
+const chartOptions = computed(() => {
+  const textColor = isDark.value ? '#cbd5e1' : '#475569'
+  const gridColor = isDark.value ? '#334155' : '#e2e8f0'
+  
+  return {
+    line: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor }, grid: { color: gridColor } },
+        x: { ticks: { color: textColor }, grid: { color: gridColor } }
+      },
+      plugins: { legend: { display: false } }
+    },
+    pie: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { 
+        legend: { position: 'bottom', labels: { color: textColor, font: { family: 'Tajawal' } } } 
+      }
+    }
+  }
+})
 
 const attendanceRate = computed(() => {
   if (!stats.value || stats.value.metrics.total_students === 0) return 0
   return Math.round((stats.value.metrics.total_present / stats.value.metrics.total_students) * 100)
 })
+
+async function fetchStats() {
+  try {
+    const [overviewRes, chartsRes] = await Promise.all([
+      getOverviewStats(),
+      getChartStats()
+    ])
+    
+    stats.value = overviewRes.data
+    const chartResData = chartsRes.data
+    
+    chartData.value = {
+      registrations: {
+        labels: chartResData.registrationsChart.labels,
+        datasets: [{
+          label: 'تسجيلات',
+          data: chartResData.registrationsChart.data,
+          borderColor: '#007ced',
+          backgroundColor: 'rgba(0, 124, 237, 0.1)',
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      attendance: {
+        labels: ['حاضر', 'غائب'],
+        datasets: [{
+          data: [chartResData.attendanceChart.present, chartResData.attendanceChart.absent],
+          backgroundColor: ['#10b981', '#ef4444'],
+          borderWidth: 0
+        }]
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load dashboard stats", err)
+  }
+}
 
 onMounted(async () => {
   if (localStorage.getItem('admin_role') !== 'admin') {
@@ -112,13 +220,19 @@ onMounted(async () => {
     return
   }
   
-  try {
-    const { data } = await getOverviewStats()
-    stats.value = data
-  } catch (err) {
-    console.error("Failed to load dashboard stats", err)
-  } finally {
-    loading.value = false
+  await fetchStats()
+  loading.value = false
+
+  // Setup WebSockets Listeners
+  if (window.Echo) {
+    window.Echo.channel('dashboard')
+      .listen('StudentRegistered', (e) => {
+        // Just refetch for simplicity to update numbers & charts & recent students list
+        fetchStats()
+      })
+      .listen('StudentAttended', (e) => {
+        fetchStats()
+      })
   }
 })
 </script>

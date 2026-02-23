@@ -8,7 +8,7 @@
           <img :src="'/logo.png'" alt="شعار المركز" style="width: 70px; height: 70px; object-fit: contain; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);" onerror="this.style.display='none'">
         </div>
         <h2 class="gradient-text" style="font-size:1.8rem; margin-bottom:0.2rem">مركز التعليم المستمر</h2>
-        <h3 style="color:#b0d4f5; font-size:1.1rem; margin-bottom:0.5rem">هندسة تقنيات الحاسوب</h3>
+        <h3 style="color:#b0d4f5; font-size:1.1rem; margin-bottom:0.5rem">جامعة بلاد الرافدين</h3>
         <p class="hint">لوحة تحكم المشرف</p>
 
         <form @submit.prevent="login" style="margin-top:1.5rem">
@@ -50,6 +50,7 @@ async function login() {
     localStorage.setItem('admin_token', data.token)
     localStorage.setItem('admin_name', data.user.name)
     localStorage.setItem('admin_role', data.user.role)
+    localStorage.setItem('admin_user', JSON.stringify(data.user)) // Save the full user object to access department_id
     router.push({ name: 'AdminDashboard' })
   } catch (err) {
     error.value = err.response?.data?.message || 'فشل تسجيل الدخول.'

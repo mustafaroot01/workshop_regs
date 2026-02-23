@@ -35,6 +35,7 @@ export const adminMe = () => api.get('/admin/me')
 
 // ── Dashboard ───────────────────────────────────────────────────
 export const getOverviewStats = () => api.get('/admin/stats/overview')
+export const getChartStats = () => api.get('/admin/stats/charts')
 
 // ── Forms ──────────────────────────────────────────────────────
 export const getForms = () => api.get('/admin/forms')
@@ -50,10 +51,11 @@ export const getStats = (formId) => api.get(`/admin/forms/${formId}/stats`)
 
 // ── Attendance ──────────────────────────────────────────────────
 export const scanAttendance = (qr_token) => api.post('/admin/attendance/scan', { qr_token })
+export const toggleAttendance = (studentId) => api.patch(`/admin/students/${studentId}/toggle-attendance`)
 
 // ── Departments ─────────────────────────────────────────────────
 export const getDepartments = () => api.get('/admin/departments')
-export const createDepartment = (data) => api.post('/admin/departments', data)
+export const createDepartment = (data) => api.post('/admin/departments', data, { headers: { 'Content-Type': 'multipart/form-data' } })
 export const deleteDepartment = (id) => api.delete(`/admin/departments/${id}`)
 
 // ── Interests ───────────────────────────────────────────────────

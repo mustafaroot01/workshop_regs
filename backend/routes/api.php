@@ -21,6 +21,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
 
     // Stats
     Route::get('stats/overview', [AdminController::class, 'getOverviewStats']);
+    Route::get('stats/charts', [AdminController::class, 'getChartStats']);
 
     // Forms
     Route::get('forms', [AdminController::class, 'getForms']);
@@ -36,6 +37,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
 
     // Attendance
     Route::post('attendance/scan', [AdminController::class, 'scanAttendance']);
+    Route::patch('students/{id}/toggle-attendance', [AdminController::class, 'toggleAttendance']);
 
     // Departments
     Route::get('departments', [AdminController::class, 'getDepartments']);

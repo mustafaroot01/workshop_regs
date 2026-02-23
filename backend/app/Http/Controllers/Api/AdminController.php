@@ -34,8 +34,19 @@ class AdminController extends Controller
         }
 
         $token = $user->createToken('admin-token')->plainTextToken;
+        $user->load('department');
 
-        return response()->json(['token' => $token, 'user' => ['name' => $user->name, 'email' => $user->email, 'role' => $user->role]]);
+        return response()->json([
+            'token' => $token, 
+            'user' => [
+                'name'          => $user->name, 
+                'email'         => $user->email, 
+                'role'          => $user->role,
+                'department_id' => $user->department_id,
+                'department_name' => $user->department ? $user->department->name : null,
+                'department_logo' => $user->department ? $user->department->logo_url : null,
+            ]
+        ]);
     }
 
     public function logout(Request $request): JsonResponse
@@ -60,15 +71,25 @@ class AdminController extends Controller
     public function getOverviewStats(Request $request): JsonResponse
     {
         $this->requireAdmin($request);
+        $user = $request->user();
 
-        $totalForms = WorkshopForm::count();
-        $openForms = WorkshopForm::where('is_open', true)->count();
-        $totalStudents = Student::count();
-        $totalPresent = Attendance::count();
+        $formQuery = WorkshopForm::query();
+        if ($user->department_id) {
+            $formQuery->where('department_id', $user->department_id);
+        }
+
+        $totalForms = (clone $formQuery)->count();
+        $openForms = (clone $formQuery)->where('is_open', true)->count();
         $departmentsCount = Department::count();
+
+        // Stats only for forms they have access to
+        $formIds = $formQuery->pluck('id');
+        $totalStudents = Student::whereIn('form_id', $formIds)->count();
+        $totalPresent = Attendance::whereIn('form_id', $formIds)->count();
 
         // Recent students
         $recentStudents = Student::with(['department', 'form'])
+            ->whereIn('form_id', $formIds)
             ->orderBy('created_at', 'desc')
             ->take(5)
             ->get()
@@ -95,23 +116,104 @@ class AdminController extends Controller
         ]);
     }
 
+    public function getChartStats(Request $request): JsonResponse
+    {
+        $this->requireAdmin($request);
+        $user = $request->user();
+
+        // Only forms this user has access to
+        $formQuery = WorkshopForm::query();
+        if ($user->department_id) {
+            $formQuery->where('department_id', $user->department_id);
+        }
+        $formIds = $formQuery->pluck('id');
+
+        // 1. Registrations per day (last 7 days)
+        $registrations = Student::whereIn('form_id', $formIds)
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
+            ->where('created_at', '>=', now()->subDays(6)->startOfDay())
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get();
+
+        $labels = [];
+        $data = [];
+        
+        // Fill exact 7 days array
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i)->format('Y-m-d');
+            $labels[] = $date;
+            
+            $record = $registrations->firstWhere('date', $date);
+            $data[] = $record ? $record->count : 0;
+        }
+
+        // 2. Attendance Stats (Present vs Absent)
+        $totalStudents = Student::whereIn('form_id', $formIds)->count();
+        $totalPresent = Attendance::whereIn('form_id', $formIds)->count();
+        $totalAbsent = max(0, $totalStudents - $totalPresent);
+
+        // 3. Top Departments
+        $topDepartments = Student::whereIn('form_id', $formIds)
+            ->selectRaw('department_id, COUNT(*) as count')
+            ->with('department')
+            ->groupBy('department_id')
+            ->orderByDesc('count')
+            ->take(5)
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'name' => $row->department ? $row->department->name : 'غير محدد',
+                    'count' => $row->count
+                ];
+            });
+
+        return response()->json([
+            'registrationsChart' => [
+                'labels' => $labels,
+                'data' => $data,
+            ],
+            'attendanceChart' => [
+                'present' => $totalPresent,
+                'absent' => $totalAbsent,
+            ],
+            'topDepartments' => $topDepartments
+        ]);
+    }
+
     // ─── WORKSHOP FORMS ─────────────────────────────────────────────────────
 
-    public function getForms(): JsonResponse
+    public function getForms(Request $request): JsonResponse
     {
-        $forms = WorkshopForm::withCount('students')->latest()->get();
+        $user = $request->user();
+        $query = WorkshopForm::with('department')->withCount('students')->latest();
+        
+        if ($user->department_id) {
+            $query->where('department_id', $user->department_id);
+        }
+
+        $forms = $query->get();
         return response()->json($forms);
     }
 
     public function createForm(Request $request): JsonResponse
     {
         $this->requireAdmin($request);
+        $user = $request->user();
+
         $validated = $request->validate([
-            'title'       => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'title'         => 'required|string|max:255',
+            'description'   => 'nullable|string',
+            // department_id is required ONLY if the creator is a super admin
+            'department_id' => [$user->department_id ? 'nullable' : 'required', 'exists:departments,id'],
         ]);
+
+        if ($user->department_id) {
+            $validated['department_id'] = $user->department_id;
+        }
+
         $form = WorkshopForm::create($validated);
-        return response()->json($form, 201);
+        return response()->json($form->load('department'), 201);
     }
 
     public function updateForm(Request $request, int $id): JsonResponse
@@ -119,12 +221,13 @@ class AdminController extends Controller
         $this->requireAdmin($request);
         $form = WorkshopForm::findOrFail($id);
         $validated = $request->validate([
-            'title'       => 'sometimes|string|max:255',
-            'description' => 'nullable|string',
-            'is_open'     => 'sometimes|boolean',
+            'title'         => 'sometimes|string|max:255',
+            'description'   => 'nullable|string',
+            'department_id' => 'sometimes|exists:departments,id',
+            'is_open'       => 'sometimes|boolean',
         ]);
         $form->update($validated);
-        return response()->json($form);
+        return response()->json($form->load('department'));
     }
 
     public function deleteForm(Request $request, int $id): JsonResponse
@@ -269,11 +372,48 @@ class AdminController extends Controller
         ]);
 
         $student->refresh()->load('attendance');
+        
+        // Broadcast event for real-time dashboard updates
+        event(new \App\Events\StudentAttended($student));
 
         return response()->json([
             'message' => 'تم تسجيل الحضور بنجاح!',
             'student' => $this->formatStudent($student),
             'already_attended' => false,
+        ]);
+    }
+
+    public function toggleAttendance(Request $request, int $id): JsonResponse
+    {
+        $this->requireAdmin($request);
+        
+        $student = Student::with('attendance')->findOrFail($id);
+
+        if ($student->attendance) {
+            // Remove attendance
+            $student->attendance->delete();
+            $attended = false;
+            $message = 'تم إلغاء حضور الطالب.';
+        } else {
+            // Mark as attended
+            Attendance::create([
+                'student_id'  => $student->id,
+                'form_id'     => $student->form_id,
+                'attended_at' => now(),
+            ]);
+            $attended = true;
+            $message = 'تم تسجيل حضور الطالب يدوياً.';
+            
+            // Broadcast event for real-time dashboard updates
+            event(new \App\Events\StudentAttended($student));
+        }
+
+        $student->refresh()->load('attendance');
+
+        return response()->json([
+            'message' => $message,
+            'attended' => $attended,
+            'attended_at' => $attended ? now()->format('Y-m-d H:i') : null
         ]);
     }
 
@@ -299,7 +439,22 @@ class AdminController extends Controller
     public function createDepartment(Request $request): JsonResponse
     {
         $this->requireAdmin($request);
-        $dept = Department::create($request->validate(['name' => 'required|string|max:100|unique:departments']));
+        
+        $validated = $request->validate([
+            'name' => 'required|string|max:100|unique:departments',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ]);
+
+        $logoPath = null;
+        if ($request->hasFile('logo')) {
+            $logoPath = $request->file('logo')->store('departments', 'public');
+        }
+
+        $dept = Department::create([
+            'name' => $validated['name'],
+            'logo_path' => $logoPath,
+        ]);
+
         return response()->json($dept, 201);
     }
 
@@ -351,21 +506,53 @@ class AdminController extends Controller
     public function getUsers(Request $request): JsonResponse
     {
         $this->requireAdmin($request);
-        return response()->json(User::select('id', 'name', 'email', 'role')->orderBy('created_at')->get());
+        $user = $request->user();
+
+        $query = User::with('department')->select('id', 'name', 'email', 'role', 'department_id');
+        
+        // Department admins only see their own department's users
+        if ($user->department_id) {
+            $query->where('department_id', $user->department_id);
+        }
+
+        return response()->json($query->orderBy('created_at')->get());
     }
 
     public function createUser(Request $request): JsonResponse
     {
         $this->requireAdmin($request);
+        $authUser = $request->user();
+
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users',
-            'password' => 'required|string|min:6',
-            'role'     => ['required', Rule::in(['admin', 'scanner'])]
+            'name'          => 'required|string|max:255',
+            'email'         => 'required|email|unique:users',
+            'password'      => 'required|string|min:6',
+            'role'          => ['required', Rule::in(['admin', 'scanner'])],
+            'department_id' => 'nullable|exists:departments,id',
         ]);
+
+        // If the creator is a department admin, they can ONLY create scanners for their own department
+        if ($authUser->department_id) {
+            if ($validated['role'] !== 'scanner') {
+                return response()->json(['message' => 'يمكن لمدير القسم إنشاء حسابات ماسح فقط.'], 403);
+            }
+            $validated['department_id'] = $authUser->department_id;
+        }
+
         $validated['password'] = Hash::make($validated['password']);
-        $user = User::create($validated);
-        return response()->json($user, 201);
+
+        $user = new User([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+        ]);
+        $user->role = $validated['role'];
+        if (isset($validated['department_id'])) {
+            $user->department_id = $validated['department_id'];
+        }
+        $user->save();
+        
+        return response()->json($user->load('department'), 201);
     }
 
     public function deleteUser(Request $request, int $id): JsonResponse
@@ -374,7 +561,14 @@ class AdminController extends Controller
         if ($request->user()->id === $id) {
             return response()->json(['message' => 'لا يمكنك حذف حسابك الحالي.'], 400);
         }
-        User::findOrFail($id)->delete();
+        $userToDelete = User::findOrFail($id);
+        
+        // Department admins cannot delete users outside their department
+        if ($request->user()->department_id && $userToDelete->department_id !== $request->user()->department_id) {
+            return response()->json(['message' => 'غير مصرح لك بحذف هذا المستخدم.'], 403);
+        }
+
+        $userToDelete->delete();
         return response()->json(['message' => 'تم الحذف.']);
     }
 }

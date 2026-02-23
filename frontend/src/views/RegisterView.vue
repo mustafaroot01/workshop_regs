@@ -11,9 +11,9 @@
 
       <!-- Error State -->
       <div v-else-if="loadError" class="center-screen">
-        <div style="font-size:4rem">⚠️</div>
-        <h2 style="margin-top:1rem">الاستمارة غير متاحة</h2>
-        <p style="color:var(--text-2);margin-top:0.5rem">قد تكون الاستمارة مغلقة أو رابطها غير صحيح.</p>
+        <div style="font-size:4rem">🔒</div>
+        <h2 style="margin-top:1rem;color:var(--error)">تم غلق استمارة التسجيل</h2>
+        <p style="color:var(--text-2);margin-top:0.5rem">عذراً، لم يعد التسجيل متاحاً في هذه الاستمارة حالياً.</p>
       </div>
 
       <!-- Registration Form -->
@@ -23,10 +23,10 @@
           <!-- Header -->
           <div class="reg-header">
             <div class="reg-logo">
-              <img :src="'/logo.png'" alt="شعار المركز" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" onerror="this.style.display='none'">
+              <img :src="form?.logo_url || '/logo.png'" alt="شعار المركز" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" onerror="this.src='/logo.png'">
             </div>
             <h1 class="gradient-text" style="font-size:2rem;margin-bottom:0.2rem;line-height:1.4;">مركز التعليم المستمر</h1>
-            <h2 style="font-size:1.2rem;color:var(--text-2);margin-bottom:0.5rem;">هندسة تقنيات الحاسوب</h2>
+            <h2 style="font-size:1.2rem;color:var(--text-2);margin-bottom:0.5rem;">جامعة بلاد الرافدين</h2>
             <h3 style="font-size:1.1rem;color:var(--primary);margin-bottom:0.5rem;font-weight:600">{{ form?.title }}</h3>
             <p v-if="form?.description" class="reg-desc">{{ form.description }}</p>
             <div class="reg-divider" />
@@ -89,7 +89,7 @@
               </div>
 
               <!-- Department -->
-              <div class="form-group full-width">
+              <div class="form-group full-width" v-if="!form?.department_id">
                 <label class="form-label">القسم *</label>
                 <select v-model="form_data.department_id" class="form-select" :class="{ error: errors.department_id }">
                   <option value="" disabled>اختر القسم</option>
@@ -198,6 +198,10 @@ onMounted(async () => {
     form.value = data.form
     departments.value = data.departments
     interests.value = data.interests
+    
+    if (form.value.department_id) {
+      form_data.department_id = form.value.department_id
+    }
   } catch {
     loadError.value = true
   } finally {
