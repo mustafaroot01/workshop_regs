@@ -62,6 +62,58 @@ npm run dev
 
 ---
 
+## 🌐 النشر على Plesk (Deployment)
+
+### خطوات النشر بعد رفع الملفات:
+
+#### 1. تثبيت المتطلبات
+```bash
+composer install --optimize-autoloader --no-dev
+```
+
+#### 2. إعداد ملف البيئة
+```bash
+cp .env.example .env
+```
+ثم عدّل ملف `.env` وأضف:
+```env
+APP_ENV=production
+APP_KEY=
+APP_URL=https://yourdomain.com
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=اسم_قاعدة_البيانات
+DB_USERNAME=اسم_المستخدم
+DB_PASSWORD=كلمة_المرور
+```
+
+#### 3. توليد مفتاح التطبيق
+```bash
+php artisan key:generate
+```
+
+#### 4. بناء جداول قاعدة البيانات وإضافة البيانات الأولية
+```bash
+php artisan migrate --seed --force
+```
+
+#### 5. ربط مجلد التخزين
+```bash
+php artisan storage:link
+```
+
+#### 6. تحسين الأداء (كاش)
+```bash
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+> **ملاحظة Plesk:** تأكد من أن `Document Root` يشير إلى مجلد `public` وأن الـ `.htaccess` مفعّل (AllowOverride All).
+
+---
+
 ## 📸 لقطات من النظام
 
 ### لوحة القيادة
