@@ -110,7 +110,7 @@ php artisan route:cache
 php artisan view:cache
 ```
 
-> **ملاحظة Plesk:** تأكد من أن `Document Root` يشير إلى مجلد `public` وأن الـ `.htaccess` مفعّل (AllowOverride All).
+> **ملاحظة :** تأكد من أن `Document Root` يشير إلى مجلد `public` وأن الـ `.htaccess` مفعّل (AllowOverride All).
 
 ---
 
